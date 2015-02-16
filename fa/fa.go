@@ -11,12 +11,14 @@ import (
   "appengine/user"
   // "github.com/melvinmt/firebase"
   "fmt"
+  "strings"
 )
 
-type SaveReq struct {
+type App struct {
   Secret string
   FbUrl string  
-  Author string   
+  Author string 
+  Name string 
   Date time.Time 
 }
 
@@ -28,12 +30,14 @@ type PersonName struct {
 type Person struct {
   Name PersonName
 }
+// Setup routes
 func init() {
   http.HandleFunc("/", root)
   http.HandleFunc("/secret", saveSecret)
   http.HandleFunc("/auth", generateAuth)
 
 }
+//Display Home Page
 func root(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-type", "text/html; charset=utf-8")
   c := appengine.NewContext(r)
@@ -46,21 +50,41 @@ func root(w http.ResponseWriter, r *http.Request) {
   url, _ := user.LogoutURL(c, "/")
   fmt.Fprintf(w, `Welcome, %s! (<a href="%s">sign out</a>)`, u, url)
 }
-func appKey(c appengine.Context) *datastore.Key {
-	return datastore.NewKey(c, "App", "default_app", 0, nil)
-}
+
+/** Save App information to database
+ */
 func saveSecret(w http.ResponseWriter, r *http.Request) {
   c := appengine.NewContext(r)
-  d := SaveReq{
+  n := r.FormValue("name")
+  if n == "" {
+  	n = nameFromUrl(r.FormValue("fbUrl"))
+  } 
+  d := App{
     Secret: r.FormValue("secret"),
     FbUrl: r.FormValue("fbUrl"),
+    Name: n,
     Date:    time.Now(),
   }
+  //Add user if a user is currently logged in
   if u := user.Current(c); u != nil {
     d.Author = u.String()
   }
-
+  //Query for already existing app with matching FbUrl
+  q := datastore.NewQuery("App").Ancestor(appKey(c)).Filter("FbUrl =", d.FbUrl)
+  var apps []App
+  //Handle query error
+  if _, err := q.GetAll(c, &apps); err != nil {
+    http.Error(w, err.Error(), http.StatusInternalServerError)
+    return
+	}
+	//Handle app existing error
+	if l := len(apps); l >= 1 {
+		http.Error(w, "App already exists", http.StatusInternalServerError)
+    return
+	}
+	//Create new key for app
   key := datastore.NewIncompleteKey(c, "App", appKey(c))
+  //Put new app in database
   _, err := datastore.Put(c, key, &d)
   if err != nil {
     http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -68,15 +92,25 @@ func saveSecret(w http.ResponseWriter, r *http.Request) {
   }
 }
 func generateAuth(w http.ResponseWriter, r *http.Request) {
-    
+  d := App{
+    Secret: r.FormValue("secret"),
+    FbUrl: r.FormValue("fbUrl"),
+    Date:    time.Now(),
+  }
 	c := appengine.NewContext(r)
-  // Ancestor queries, as shown here, are strongly consistent with the High
-  // Replication Datastore. Queries that span entity groups are eventually
-  // consistent. If we omitted the .Ancestor from this query there would be
-  // a slight chance that Greeting that had just been written would not
-  // show up in a query.
-  q := datastore.NewQuery("App").Ancestor(appKey(c)).Order("-Date").Limit(10)
-  apps := make([]SaveReq, 0, 10)
+  //Query for already existing app with matching FbUrl
+  q := datastore.NewQuery("App").Ancestor(appKey(c)).Filter("FbUrl =", d.FbUrl)
+  var apps []App
+  //Handle query error
+  if _, err := q.GetAll(c, &apps); err != nil {
+    http.Error(w, err.Error(), http.StatusInternalServerError)
+    return
+	}
+	//Handle app existing error
+	if l := len(apps); l >= 1 {
+		http.Error(w, "App already exists", http.StatusInternalServerError)
+    return
+	}
   if _, err := q.GetAll(c, &apps); err != nil {
     http.Error(w, err.Error(), http.StatusInternalServerError)
     return
@@ -118,6 +152,14 @@ func generateAuth(w http.ResponseWriter, r *http.Request) {
     // }
 
     // fmt.Println(fred.Name.First, fred.Name.Last) // prints: Fred Swanson
+}
+func nameFromUrl(u string) string {
+	u1 := strings.Replace(u, "https://", "", -1)
+	return strings.Replace(u1, ".firebaseio.com", "", -1)
+}
+//Create a new datastore key for an app
+func appKey(c appengine.Context) *datastore.Key {
+	return datastore.NewKey(c, "App", "default_app", 0, nil)
 }
 // func page(w http.ResponseWriter, r *http.Request) {
 //   if err := homeTemplate.Execute(w, "Welcome to the Fireadmin Server"); err != nil {
