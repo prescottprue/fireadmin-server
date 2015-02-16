@@ -9,9 +9,12 @@ import (
   "appengine"
   "appengine/datastore"
   "appengine/user"
+  // "appengine/log"
   // "github.com/melvinmt/firebase"
   "fmt"
   "strings"
+  "errors"
+  "github.com/zabawaba99/fireauth"
 )
 
 type App struct {
@@ -30,10 +33,13 @@ type PersonName struct {
 type Person struct {
   Name PersonName
 }
+type TokenRes struct {
+	Token string
+}
 // Setup routes
 func init() {
   http.HandleFunc("/", root)
-  http.HandleFunc("/secret", saveSecret)
+  http.HandleFunc("/setup", saveSecret)
   http.HandleFunc("/auth", generateAuth)
 
 }
@@ -91,43 +97,67 @@ func saveSecret(w http.ResponseWriter, r *http.Request) {
     return
   }
 }
-func generateAuth(w http.ResponseWriter, r *http.Request) {
-  d := App{
-    Secret: r.FormValue("secret"),
-    FbUrl: r.FormValue("fbUrl"),
-    Date:    time.Now(),
-  }
-	c := appengine.NewContext(r)
+//Take url and find if app exists
+func GetApp(ad App, c appengine.Context) (a App, err error) {
+
   //Query for already existing app with matching FbUrl
-  q := datastore.NewQuery("App").Ancestor(appKey(c)).Filter("FbUrl =", d.FbUrl)
+  q := datastore.NewQuery("App").Ancestor(appKey(c)).Filter("FbUrl =", ad.FbUrl).Limit(1)
   var apps []App
   //Handle query error
-  if _, err := q.GetAll(c, &apps); err != nil {
-    http.Error(w, err.Error(), http.StatusInternalServerError)
-    return
+  keys, err := q.GetAll(c, &apps)
+  var n App
+  if err != nil {
+  	return n, err
+  }
+  c.Infof("Keys: %v", keys)
+  c.Infof("Apps: %v", apps)
+
+  if len(keys) < 1 {
+		return n, errors.New("App Not Found") 
 	}
+	var app App
+  app = apps[0]
+
 	//Handle app existing error
-	if l := len(apps); l >= 1 {
-		http.Error(w, "App already exists", http.StatusInternalServerError)
-    return
+	return app, nil
+}
+func generateAuth(w http.ResponseWriter, r *http.Request) {
+  d := App{
+    FbUrl: r.FormValue("fbUrl"),
+  }
+  	//App Engine Context
+	c := appengine.NewContext(r)
+	a, err := GetApp(d, c)
+	//handle existance check error
+  if err != nil {
+  	http.Error(w, err.Error(), http.StatusInternalServerError)
+  	return
+  }
+
+	//Load Secret from database
+	//[TODO] Load shape of auth object from database (set by user)
+	// Run required authentication check (password)
+	// Create auth object
+	//TokenGenerator Object
+	gen := fireauth.New(a.Secret)
+	data := fireauth.Data{"uid": "1"}
+	token, err := gen.CreateToken(data, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-  if _, err := q.GetAll(c, &apps); err != nil {
-    http.Error(w, err.Error(), http.StatusInternalServerError)
-    return
+	ts := TokenRes{
+		Token: token,
 	}
-  js, _ := json.Marshal(apps)
-   w.Header().Set("Content-Type", "application/json")
-  w.Write(js)
+	res, err := json.Marshal(ts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+  w.Header().Set("Content-Type", "application/json")
+  w.Write(res)
 
     // var err error
 
-    // // url := "https://SampleChat.firebaseio.com/users/fred/name"
-
-    // // Can also be your Firebase secret:
-    // // authToken := "MqL0c8tKCtheLSYcygYNtGhU8Z2hULOFs9OKPdEp"
-
-    // // Auth is optional:
-    // ref := firebase.NewReference(g.FbUrl).Auth(g.Secret)
 
     // // Create the value.
     // personName := PersonName{
