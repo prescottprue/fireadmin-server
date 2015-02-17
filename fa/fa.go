@@ -127,25 +127,24 @@ func generateAuth(w http.ResponseWriter, r *http.Request) {
   }
   	//App Engine Context
 	c := appengine.NewContext(r)
+	//Load App including secret from database
 	a, err := GetApp(d, c)
-	//handle existance check error
   if err != nil {
   	http.Error(w, err.Error(), http.StatusInternalServerError)
   	return
   }
-
-	//Load Secret from database
 	//[TODO] Load shape of auth object from database (set by user)
 	// Run required authentication check (password)
-	// Create auth object
-	//TokenGenerator Object
+	// TokenGenerator
 	gen := fireauth.New(a.Secret)
-	data := fireauth.Data{"uid": "1"}
+	// Build auth object
+	data := fireauth.Data{"provider":"Fireadmin", "uid": "1"}
 	token, err := gen.CreateToken(data, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	//Token response
 	ts := TokenRes{
 		Token: token,
 	}
@@ -153,6 +152,7 @@ func generateAuth(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+  //Write response
   w.Header().Set("Content-Type", "application/json")
   w.Write(res)
 
@@ -181,7 +181,6 @@ func generateAuth(w http.ResponseWriter, r *http.Request) {
     //     panic(err)
     // }
 
-    // fmt.Println(fred.Name.First, fred.Name.Last) // prints: Fred Swanson
 }
 func nameFromUrl(u string) string {
 	u1 := strings.Replace(u, "https://", "", -1)
