@@ -1,10 +1,13 @@
 # Fireadmin Server
 
-Golang server for storing and configuring Fireadmin accounts. Modified auth token logins are the initial functionality this server will be handling, but is planned to contain all server-side functionality for Fireadmin.
+Server built with [Golang](https://golang.org/) on [Google App Engine](https://cloud.google.com/appengine/docs) for  handling Fireadmin tasks. Functionality includes configuring Fireadmin accounts, generating an Firebase auth token, and uploading images.
+
+### Client Library - [Fireadmin](https://github.com/prescottprue/Fireadmin)
+
 
 ## Setup
 1. Clone into your go path repository with:
-  `go get github.com/prescottprue/Fireadmin`.
+  `go get github.com/prescottprue/fireadmin-server`.
 2. Make sure that Google Cloud Platform CLI is installed by running: `gcloud --help`.
 
   **NOTE**: If you don't have it installed follow the [Google Cloud CLI Quick start Guide](https://cloud.google.com/sdk/#Quick_Start)

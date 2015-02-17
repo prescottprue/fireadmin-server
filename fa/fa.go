@@ -41,7 +41,7 @@ func init() {
   http.HandleFunc("/", root)
   http.HandleFunc("/setup", saveSecret)
   http.HandleFunc("/auth", generateAuth)
-
+  http.HandleFunc("/upload", generateAuth)
 }
 //Display Home Page
 func root(w http.ResponseWriter, r *http.Request) {
@@ -63,17 +63,18 @@ func saveSecret(w http.ResponseWriter, r *http.Request) {
   c := appengine.NewContext(r)
   n := r.FormValue("name")
   if n == "" {
-  	n = nameFromUrl(r.FormValue("fbUrl"))
-  } 
+  	n = nameFromUrl(r.FormValue("fbUrl")) // Get name from url if it does not exist
+  }
+  //Build app object
   d := App{
     Secret: r.FormValue("secret"),
     FbUrl: r.FormValue("fbUrl"),
     Name: n,
-    Date:    time.Now(),
+    Date: time.Now(),
   }
-  //Add user if a user is currently logged in
+  //Check if user is logged in
   if u := user.Current(c); u != nil {
-    d.Author = u.String()
+    d.Author = u.String() //Add user as Author param
   }
   //Query for already existing app with matching FbUrl
   q := datastore.NewQuery("App").Ancestor(appKey(c)).Filter("FbUrl =", d.FbUrl)
@@ -122,66 +123,42 @@ func GetApp(ad App, c appengine.Context) (a App, err error) {
 	return app, nil
 }
 func generateAuth(w http.ResponseWriter, r *http.Request) {
+  //Set form val as FbUrl of App
   d := App{
     FbUrl: r.FormValue("fbUrl"),
   }
-  	//App Engine Context
-	c := appengine.NewContext(r)
-	//Load App including secret from database
-	a, err := GetApp(d, c)
+	c := appengine.NewContext(r) //App Engine Context
+
+	la, err := GetApp(d, c) //Load App including secret from database
   if err != nil {
   	http.Error(w, err.Error(), http.StatusInternalServerError)
   	return
   }
+
 	//[TODO] Load shape of auth object from database (set by user)
-	// Run required authentication check (password)
-	// TokenGenerator
-	gen := fireauth.New(a.Secret)
-	// Build auth object
-	data := fireauth.Data{"provider":"Fireadmin", "uid": "1"}
-	token, err := gen.CreateToken(data, nil)
+	//[TODO] Run required authentication check (password)
+  //[TODO] Load auth data from db
+	gen := fireauth.New(la.Secret) // TokenGenerator
+  //[TODO] Fill auth object with actual data
+	data := fireauth.Data{"uid": "1"} // Build auth object
+	token, err := gen.CreateToken(data, nil) //Create token
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	//Token response
+	//Build Token response
 	ts := TokenRes{
 		Token: token,
 	}
-	res, err := json.Marshal(ts)
+	res, err := json.Marshal(ts) //Marshal to Json for response
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-  //Write response
-  w.Header().Set("Content-Type", "application/json")
-  w.Write(res)
-
-    // var err error
-
-
-    // // Create the value.
-    // personName := PersonName{
-    //     First: "Fred",
-    //     Last:  "Swanson",
-    // }
-
-    // // Write the value to Firebase.
-    // if err = ref.Write(personName); err != nil {
-    //     panic(err)
-    // }
-
-    // // Now, we're going to retrieve the person.
-    // personUrl := "https://SampleChat.firebaseIO-demo.com/users/fred"
-
-    // personRef := firebase.NewReference(personUrl).Export(false)
-
-    // fred := Person{}
-
-    // if err = personRef.Value(fred); err != nil {
-    //     panic(err)
-    // }
-
+  w.Header().Set("Content-Type", "application/json") 
+  w.Write(res) //Write response
 }
+//----------------Util Funcitons-----------------\\
+//Get app name from Firebase url
 func nameFromUrl(u string) string {
 	u1 := strings.Replace(u, "https://", "", -1)
 	return strings.Replace(u1, ".firebaseio.com", "", -1)
@@ -190,19 +167,3 @@ func nameFromUrl(u string) string {
 func appKey(c appengine.Context) *datastore.Key {
 	return datastore.NewKey(c, "App", "default_app", 0, nil)
 }
-// func page(w http.ResponseWriter, r *http.Request) {
-//   if err := homeTemplate.Execute(w, "Welcome to the Fireadmin Server"); err != nil {
-//     http.Error(w, err.Error(), http.StatusInternalServerError)
-//   }
-// }
-// var homeTemplate = template.Must(template.New("book").Parse(`
-// <html>
-//   <head>
-//     <title>Fireadmin Server</title>
-//   </head>
-//   <body>
-//   <div style="text-align:center; margin-top:20%;">{{.}}</div>
-    
-//   </body>
-// </html>
-// `))
